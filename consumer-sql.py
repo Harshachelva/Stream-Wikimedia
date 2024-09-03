@@ -26,12 +26,12 @@ def connect_mysql(host, user, password, database):
 
 def insert_batch_into_mysql(cursor, cnx, events):
     add_event = ("INSERT INTO events "
-                 "(id, domain, namespace, title, timestamp, user_name, user_type, old_length, new_length) "
-                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)")
+                 "(id, domain, namespace, title, timestamp, user_name, user_type, new_length) "
+                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)")
 
     data_events = [(event['id'], event['domain'], event['namespace'], event['title'],
                     event['timestamp'], event['user_name'], event['user_type'],
-                    event['old_length'], event['new_length']) for event in events]
+                    event['new_length']) for event in events]
     
     cursor.executemany(add_event, data_events)
     cnx.commit()

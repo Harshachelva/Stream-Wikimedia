@@ -3,6 +3,7 @@ import argparse
 from sseclient import SSEClient as EventSource
 from kafka import KafkaProducer
 from kafka.errors import NoBrokersAvailable
+from datetime import datetime
 
 def create_kafka_producer(bootstrap_server):
     try:
@@ -27,15 +28,19 @@ def construct_event(event_data, user_types):
 
     user_type = user_types[event_data['bot']]
 
+    # Convert timestamp to MySQL compatible format
+    timestamp = event_data['meta']['dt']
+    timestamp = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%SZ').strftime('%Y-%m-%d %H:%M:%S')
+
     event = {
         "id": event_data['id'],
         "domain": event_data['meta']['domain'],
         "namespace": event_data['namespace'],
         "title": event_data['title'],
-        "timestamp": event_data['meta']['dt'],
+        "timestamp": timestamp,  # Use converted timestamp
         "user_name": event_data['user'],
         "user_type": user_type,
-        "old_length": event_data['length']['old'],
+        #"old_length": event_data['length']['old'],
         "new_length": event_data['length']['new']
     }
 
@@ -75,24 +80,26 @@ if __name__ == "__main__":
 
     batch_size = 10
     message_batch = []
-
-    for event in EventSource(url):
-        if event.event == 'message':
-            try:
-                event_data = json.loads(event.data)
-            except ValueError:
-                pass
-            else:
-                if event_data['type'] == 'new':
-                    event_to_send = construct_event(event_data, user_types)
-                    message_batch.append(event_to_send)
-                    
+    try:
+        for event in EventSource(url):
+            if event.event == 'message':
+                try:
+                    event_data = json.loads(event.data)
+                except ValueError:
+                    pass
+                else:
+                    # Use get() to safely access 'type' key with a default value of None
+                    if event_data.get('type') == 'new':
+                        event_to_send = construct_event(event_data, user_types)
+                        message_batch.append(event_to_send)
+                
                     if len(message_batch) >= batch_size:
                         producer.send(args.topic_name, value=message_batch)
                         message_batch = []
 
-    if message_batch:
-        producer.send(args.topic_name, value=message_batch)
+        if message_batch:
+            producer.send(args.topic_name, value=message_batch)
 
-    producer.close()
-    print('Producer closed.')
+    except KeyboardInterrupt:
+        producer.close()
+        print('Producer closed with a keyboard interrupt.')
